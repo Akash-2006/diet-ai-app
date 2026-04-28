@@ -8,6 +8,6 @@ Private monorepo for the Diet & Nutrition AI Chat App.
 |------|---------|
 | `frontend/` | Next.js 14 (App Router) UI — wired in issues 7+ |
 | `backend/` | FastAPI + LangChain — wired in issues 2+ |
-| `.github/workflows/` | Backend: `backend-ci.yml` (#13); frontend CI #14 |
+| `.github/workflows/` | `backend-ci.yml` (#13), `frontend-ci.yml` (#14) |
 
 See `frontend/README.md` (Next.js) and `backend/README.md` (FastAPI) for how to run each app.
