@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
@@ -6,10 +8,15 @@ export default function Home() {
       <div className="text-center space-y-2 max-w-md">
         <h1 className="text-2xl font-semibold tracking-tight">Diet &amp; Nutrition AI</h1>
         <p className="text-sm text-muted-foreground">
-          Next.js 14 · Tailwind CSS · shadcn/ui scaffold (issue #7). Chat UI follows in later issues.
+          Configure your encrypted Anthropic API key (stored in the browser only), then continue to chat
+          when it ships.
         </p>
       </div>
-      <Button type="button">shadcn/ui wired</Button>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Button asChild>
+          <Link href="/setup">API key setup</Link>
+        </Button>
+      </div>
     </main>
   );
 }

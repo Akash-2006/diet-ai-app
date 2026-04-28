@@ -1,6 +1,6 @@
 # Frontend
 
-**Next.js 14** (App Router) · **Tailwind CSS** · **[shadcn/ui](https://ui.shadcn.com/)** — scaffold for issue **#7**.
+**Next.js 14** (App Router) · **Tailwind CSS** · **[shadcn/ui](https://ui.shadcn.com/)** · **crypto-js** (CryptoJS-compatible AES for API keys).
 
 ## Scripts
 
@@ -12,10 +12,19 @@ npm run start
 npm run lint
 ```
 
-## Stack notes
+## Configuration
 
-- **Tailwind CSS v3** theme tokens wired for shadcn-style CSS variables (`app/globals.css` + `tailwind.config.ts`).
-- Import alias: `@/` → project root (`components.json`, `tsconfig.json`).
-- **`components/ui/button.tsx`**: Radix `Slot` + `class-variance-authority` (classic shadcn pattern). Add more components with `npx shadcn@latest add …` locally as needed.
+Copy `.env.example` to `.env.local` at minimum:
 
-Later issues wire the API client, encryption, chat, uploads, and tests.
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_ENCRYPTION_SECRET` | **Must equal** backend `ENCRYPTION_SECRET`. Used client-side only to encrypt the Anthropic API key before `localStorage`; never uploaded as plain text. |
+| `NEXT_PUBLIC_API_BASE_URL` | Backend URL (defaults reasonable for local FastAPI when wiring chat). |
+| `NEXT_PUBLIC_APP_PASSWORD` | **Must equal** backend `APP_PASSWORD`; used as `X-App-Password` on API calls once connected. |
+
+## Features
+
+- **`/`** — Landing with link to setup.
+- **`/setup`** — Enter Anthropic API key → **`CryptoJS.AES.encrypt(...).toString()`** → ciphertext stored under `lib/encryptedApiKey.ts` storage key (`diet_ai_encrypted_api_key_v1`). Matches `decrypt_cryptojs_openssl` in `backend/crypto_util.py`.
+
+Later issues wire the chat UI, multipart image upload, and Vitest around this encryption path.
