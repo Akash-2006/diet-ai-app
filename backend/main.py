@@ -1,16 +1,16 @@
-"""FastAPI backend: health + nutrition chat (issue #4)."""
+"""FastAPI backend: health, text chat, image chat."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from crypto_util import decrypt_cryptojs_openssl
-from nutrition_graph import run_nutrition_chat
+from nutrition_graph import run_nutrition_chat, run_nutrition_image_chat
 
 
 class Settings(BaseSettings):
@@ -65,5 +65,23 @@ async def health() -> dict[str, str]:
 async def api_chat(body: ChatBody, _: None = DependsPassword) -> dict[str, Any]:
     api_key_plain = decrypt_user_key(body.encrypted_api_key)
     reply, conv_id = run_nutrition_chat(api_key_plain, body.message)
+    return {"reply": reply, "conversation_id": conv_id}
+
+
+@app.post("/api/chat/image")
+async def api_chat_image(
+    _: None = DependsPassword,
+    encrypted_api_key: str = Form(...),
+    conversation_id: str = Form(""),
+    message: str = Form(""),
+    image: UploadFile = File(...),
+) -> dict[str, Any]:
+    api_key_plain = decrypt_user_key(encrypted_api_key)
+    _ = conversation_id  # forwarded with multi-turn memory in issue #6
+    raw = await image.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty image upload")
+    media = image.content_type or "application/octet-stream"
+    reply, conv_id = run_nutrition_image_chat(api_key_plain, media, raw, message or None)
     return {"reply": reply, "conversation_id": conv_id}
 
