@@ -65,6 +65,12 @@ Same header **`X-App-Password`**. Response shape: `{ "reply", "conversation_id" 
 
 ## Tests
 
+Uses **`requirements-dev.txt`** (pytest + Ruff).
+
 ```bash
+pip install -r requirements.txt -r requirements-dev.txt
+ruff check .
 pytest tests/
 ```
+
+CI: `.github/workflows/backend-ci.yml` (paths under `backend/**`).
