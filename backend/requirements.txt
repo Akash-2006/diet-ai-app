@@ -1,2 +1,6 @@
 fastapi==0.109.2
 uvicorn[standard]==0.27.1
+pycryptodome==3.20.0
+
+# dev/tests
+pytest>=8.3
