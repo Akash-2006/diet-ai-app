@@ -24,7 +24,8 @@ Copy `.env.example` to `.env.local` at minimum:
 
 ## Features
 
-- **`/`** — Landing with link to setup.
-- **`/setup`** — Enter Anthropic API key → **`CryptoJS.AES.encrypt(...).toString()`** → ciphertext stored under `lib/encryptedApiKey.ts` storage key (`diet_ai_encrypted_api_key_v1`). Matches `decrypt_cryptojs_openssl` in `backend/crypto_util.py`.
+- **`/`** — Landing with links to setup and chat.
+- **`/setup`** — Enter Anthropic API key → **`CryptoJS.AES.encrypt(...).toString()`** → ciphertext stored under `lib/encryptedApiKey.ts` (`diet_ai_encrypted_api_key_v1`).
+- **`/chat`** — Text chat (`POST /api/chat`) with bubbles, loading, **`conversation_id`** continuity, and **`Reset thread`** calling `POST /api/chat/reset`. Requires **`NEXT_PUBLIC_APP_PASSWORD`** (`X-App-Password`) plus a saved encrypted key.
 
-Later issues wire the chat UI, multipart image upload, and Vitest around this encryption path.
+Next issues: multipart food photo (`/api/chat/image`), Vitest coverage.
