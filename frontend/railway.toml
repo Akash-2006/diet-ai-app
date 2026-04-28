@@ -1,0 +1,13 @@
+# Railway config-as-code: create the service with Root Directory `frontend`.
+# https://docs.railway.com/reference/config-as-code
+#
+# Set all NEXT_PUBLIC_* variables in Railway *before* the first build — Next.js
+# inlines them at compile time.
+
+[build]
+builder = "RAILPACK"
+buildCommand = "npm ci && npm run build"
+
+[deploy]
+startCommand = "npx next start -H 0.0.0.0 -p $PORT"
+healthcheckPath = "/"
