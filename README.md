@@ -10,4 +10,4 @@ Private monorepo for the Diet & Nutrition AI Chat App.
 | `backend/` | FastAPI + LangChain — wired in issues 2+ |
 | `.github/workflows/` | CI in issues 13–14 |
 
-Placeholder `README.md` files exist under `frontend/` and `backend/` until those folders hold real apps.
+See `frontend/README.md` (Next.js) and `backend/README.md` (FastAPI) for how to run each app.
