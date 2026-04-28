@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from crypto_util import decrypt_cryptojs_openssl
-from nutrition_graph import run_nutrition_chat, run_nutrition_image_chat
+from nutrition_graph import reset_conversation, run_nutrition_chat, run_nutrition_image_chat
 
 
 class Settings(BaseSettings):
@@ -36,7 +36,12 @@ app.add_middleware(
 class ChatBody(BaseModel):
     encrypted_api_key: str
     message: str
-    conversation_id: str | None = None  # multi-turn memory wired in issue #6
+    conversation_id: str | None = None
+
+
+class ResetBody(BaseModel):
+    encrypted_api_key: str
+    conversation_id: str
 
 
 def verify_app_password(x_app_password: str | None = Header(None, alias="X-App-Password")) -> None:
@@ -64,7 +69,7 @@ async def health() -> dict[str, str]:
 @app.post("/api/chat")
 async def api_chat(body: ChatBody, _: None = DependsPassword) -> dict[str, Any]:
     api_key_plain = decrypt_user_key(body.encrypted_api_key)
-    reply, conv_id = run_nutrition_chat(api_key_plain, body.message)
+    reply, conv_id = run_nutrition_chat(api_key_plain, body.message, body.conversation_id)
     return {"reply": reply, "conversation_id": conv_id}
 
 
@@ -77,11 +82,27 @@ async def api_chat_image(
     image: UploadFile = File(...),
 ) -> dict[str, Any]:
     api_key_plain = decrypt_user_key(encrypted_api_key)
-    _ = conversation_id  # forwarded with multi-turn memory in issue #6
     raw = await image.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty image upload")
     media = image.content_type or "application/octet-stream"
-    reply, conv_id = run_nutrition_image_chat(api_key_plain, media, raw, message or None)
+    cid = conversation_id.strip() if conversation_id else None
+    reply, conv_id = run_nutrition_image_chat(
+        api_key_plain,
+        media,
+        raw,
+        message or None,
+        cid,
+    )
     return {"reply": reply, "conversation_id": conv_id}
+
+
+@app.post("/api/chat/reset")
+async def api_chat_reset(body: ResetBody, _: None = DependsPassword) -> dict[str, Any]:
+    _ = decrypt_user_key(body.encrypted_api_key)
+    cid = body.conversation_id.strip()
+    if not cid:
+        raise HTTPException(status_code=400, detail="conversation_id required")
+    reset_conversation(cid)
+    return {"ok": True, "conversation_id": cid}
 
