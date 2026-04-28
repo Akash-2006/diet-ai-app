@@ -96,3 +96,21 @@ def test_reset_missing_conversation_id(client: TestClient, enc: str) -> None:
         headers={"X-App-Password": "test-app-password"},
     )
     assert r.status_code == 400
+
+
+def test_reset_invalid_password_is_403(client: TestClient, enc: str) -> None:
+    r = client.post(
+        "/api/chat/reset",
+        json={"encrypted_api_key": enc, "conversation_id": "conversation-ignored"},
+        headers={"X-App-Password": "invalid-app-password"},
+    )
+    assert r.status_code == 403
+
+
+def test_reset_invalid_cipher_is_400(client: TestClient) -> None:
+    r = client.post(
+        "/api/chat/reset",
+        json={"encrypted_api_key": "not-real-ciphertext-at-all", "conversation_id": "valid-looking-id-string"},
+        headers={"X-App-Password": "test-app-password"},
+    )
+    assert r.status_code == 400
