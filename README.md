@@ -6,7 +6,7 @@ Private monorepo for the Diet & Nutrition AI Chat App.
 
 | Path | Purpose |
 |------|---------|
-| `frontend/` | Next.js 14 (App Router) UI — wired in issues 7+ |
+| `frontend/` | Next.js 14 (App Router) UI; **`railway.toml`** for Railway (#16) |
 | `backend/` | FastAPI + LangChain; **`railway.toml`** for Railway deploy (#15) |
 | `.github/workflows/` | `backend-ci.yml` (#13), `frontend-ci.yml` (#14) |
 
