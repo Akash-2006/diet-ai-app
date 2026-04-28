@@ -37,3 +37,33 @@ def test_chat_success(client: TestClient) -> None:
     data = r.json()
     assert data["reply"]
     assert "conversation_id" in data
+
+
+def test_get_health_requires_no_auth_and_returns_ok() -> None:
+    from main import app
+
+    c = TestClient(app)
+    r = c.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+def test_chat_invalid_app_password_is_403(client: TestClient) -> None:
+    enc = encrypt_cryptojs_openssl("sk-test", "test-shared-secret-for-pytest-only!!")
+    r = client.post(
+        "/api/chat",
+        json={"encrypted_api_key": enc, "message": "Hi"},
+        headers={"X-App-Password": "wrong-password"},
+    )
+    assert r.status_code == 403
+
+
+def test_chat_invalid_ciphertext_is_400(client: TestClient) -> None:
+    r = client.post(
+        "/api/chat",
+        json={"encrypted_api_key": "not-openssl-salted-json", "message": "Hi"},
+        headers={"X-App-Password": "test-app-password"},
+    )
+    assert r.status_code == 400
+    detail = r.json().get("detail") or ""
+    assert isinstance(detail, str) and ("decrypt" in detail.lower())

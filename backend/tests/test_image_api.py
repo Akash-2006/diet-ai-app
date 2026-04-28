@@ -52,3 +52,36 @@ def test_chat_image_success(client: TestClient) -> None:
     data = r.json()
     assert data.get("reply")
     assert data.get("conversation_id")
+
+
+def test_chat_image_invalid_app_password(client: TestClient) -> None:
+    enc = encrypt_cryptojs_openssl("sk-test", "test-shared-secret-for-pytest-only!!")
+    r = client.post(
+        "/api/chat/image",
+        data={"encrypted_api_key": enc},
+        files={"image": ("tiny.png", PNG_1X1_BYTES, "image/png")},
+        headers={"X-App-Password": "bogus"},
+    )
+    assert r.status_code == 403
+
+
+def test_chat_image_invalid_ciphertext_returns_400(client: TestClient) -> None:
+    r = client.post(
+        "/api/chat/image",
+        data={"encrypted_api_key": "not-a-valid-ciphertext", "conversation_id": ""},
+        files={"image": ("tiny.png", PNG_1X1_BYTES, "image/png")},
+        headers={"X-App-Password": "test-app-password"},
+    )
+    assert r.status_code == 400
+
+
+def test_chat_image_empty_upload_is_400(client: TestClient) -> None:
+    enc = encrypt_cryptojs_openssl("sk-test", "test-shared-secret-for-pytest-only!!")
+    r = client.post(
+        "/api/chat/image",
+        data={"encrypted_api_key": enc},
+        files={"image": ("empty.png", b"", "image/png")},
+        headers={"X-App-Password": "test-app-password"},
+    )
+    assert r.status_code == 400
+    assert "Empty image" in (r.json().get("detail") or "")
