@@ -10,6 +10,7 @@ npm run dev       # http://localhost:3000
 npm run build
 npm run start
 npm run lint
+npm run test       # Vitest (happy-dom): encrypt helper, Setup, Chat smoke + Photo wiring
 ```
 
 ## Configuration
@@ -28,4 +29,10 @@ Copy `.env.example` to `.env.local` at minimum:
 - **`/setup`** — Enter Anthropic API key → **`CryptoJS.AES.encrypt(...).toString()`** → ciphertext stored under `lib/encryptedApiKey.ts` (`diet_ai_encrypted_api_key_v1`).
 - **`/chat`** — Text chat (`POST /api/chat`), optional **food photo** via multipart **`POST /api/chat/image`** (caption optional), **`conversation_id`** continuity, **`Reset thread`** (`POST /api/chat/reset`). Needs **`NEXT_PUBLIC_APP_PASSWORD`** and a saved encrypted key.
 
-Later: Vitest around encrypt + chat flows.
+### Tests (`vitest`)
+
+- **`lib/encryptedApiKey.test.ts`** — AES encrypt/decrypt parity with CryptoJS, `localStorage` helpers, `hasEncryptionConfigured` vs env.
+- **`__tests__/setup-page.test.tsx`** — validation + ciphertext saved after Encrypt & save.
+- **`__tests__/chat-page.smoke.test.tsx`** — chat shell when a key exists; **Photo** + hidden file input.
+
+Config: `vitest.config.mjs`, `vitest.setup.ts` (maps `next/link`, stubs `ResizeObserver` / `scrollIntoView`).
