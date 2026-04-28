@@ -17,7 +17,24 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Then open `GET http://127.0.0.1:8000/health` — expect `{ "status": "ok" }`.
 
-## Tests (crypto utilities)
+Copy `.env.example` to `.env` and set `APP_PASSWORD` and `ENCRYPTION_SECRET`.
+
+## Chat API (issue **#4**)
+
+`POST /api/chat` JSON body:
+
+```json
+{
+  "encrypted_api_key": "<CryptoJS ciphertext>",
+  "message": "user text",
+  "conversation_id": null
+}
+```
+
+Headers: `X-App-Password: <APP_PASSWORD>`  
+Response: `{ "reply": "...", "conversation_id": "<uuid>" }` (multi-turn memory in issue **#6**).
+
+## Tests
 
 ```bash
 pytest tests/
