@@ -1,0 +1,10 @@
+# Config-as-code for Railway: create the service from this repo with
+# Root Directory set to `backend` (monorepo).
+# Docs: https://docs.railway.com/reference/config-as-code
+
+[build]
+builder = "RAILPACK"
+
+[deploy]
+startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
