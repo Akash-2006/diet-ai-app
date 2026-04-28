@@ -34,6 +34,19 @@ Copy `.env.example` to `.env` and set `APP_PASSWORD` and `ENCRYPTION_SECRET`.
 Headers: `X-App-Password: <APP_PASSWORD>`  
 Response: `{ "reply": "...", "conversation_id": "<uuid>" }` (multi-turn memory in issue **#6**).
 
+## Image upload (issue **#5**)
+
+`POST /api/chat/image` — multipart form:
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `encrypted_api_key` | string | CryptoJS ciphertext (same as text chat) |
+| `conversation_id` | string | optional placeholder (issue **#6**) |
+| `message` | string | optional caption |
+| `image` | file | image/jpeg, png, … |
+
+Same header **`X-App-Password`**. Response shape: `{ "reply", "conversation_id" }`.
+
 ## Tests
 
 ```bash

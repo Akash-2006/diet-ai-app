@@ -1,7 +1,8 @@
-"""LangGraph agent: Claude + nutrition system prompt (single-turn per request for issue #4)."""
+"""LangGraph agent: Claude + nutrition system prompt."""
 
 from __future__ import annotations
 
+import base64
 import uuid
 
 from langchain_anthropic import ChatAnthropic
@@ -45,12 +46,37 @@ def get_graph():
     return _graph
 
 
+def _assistant_text_from_result(out: dict) -> str:
+    last = out["messages"][-1]
+    body = getattr(last, "content", "")
+    return body if isinstance(body, str) else str(body)
+
+
 def run_nutrition_chat(decrypted_api_key: str, user_message: str) -> tuple[str, str]:
     """Return (assistant_text, conversation_id). Memory per session lands in issue #6."""
     graph = get_graph()
     cfg: RunnableConfig = {"configurable": {"anthropic_api_key": decrypted_api_key}}
     out = graph.invoke({"messages": [HumanMessage(content=user_message)]}, cfg)
-    last = out["messages"][-1]
-    body = getattr(last, "content", "")
-    text = body if isinstance(body, str) else str(body)
-    return text, str(uuid.uuid4())
+    return _assistant_text_from_result(out), str(uuid.uuid4())
+
+
+def run_nutrition_image_chat(
+    decrypted_api_key: str,
+    media_type: str,
+    image_bytes: bytes,
+    user_caption: str | None,
+) -> tuple[str, str]:
+    """Vision: food image + optional caption. Same graph; multimodal HumanMessage."""
+    caption = (user_caption or "").strip()
+    if not caption:
+        caption = "Describe this food and estimate nutrition (calories and macros)."
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    media = media_type.strip() if media_type else "application/octet-stream"
+    content = [
+        {"type": "text", "text": caption},
+        {"type": "image_url", "image_url": {"url": f"data:{media};base64,{b64}"}},
+    ]
+    graph = get_graph()
+    cfg: RunnableConfig = {"configurable": {"anthropic_api_key": decrypted_api_key}}
+    out = graph.invoke({"messages": [HumanMessage(content=content)]}, cfg)
+    return _assistant_text_from_result(out), str(uuid.uuid4())
