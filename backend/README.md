@@ -19,6 +19,15 @@ Then open `GET http://127.0.0.1:8000/health` — expect `{ "status": "ok" }`.
 
 Copy `.env.example` to `.env` and set `APP_PASSWORD` and `ENCRYPTION_SECRET`.
 
+## Deploy (Railway) (issue **#15**)
+
+- **GitHub service** → set **Root Directory** to **`backend`** (reads `requirements.txt`, `railway.toml`, `main.py`).
+- **`backend/railway.toml`** — `uvicorn` on **`$PORT`**, **`GET /health`** for healthchecks.
+- **Variables** (same names as `.env.example`; set in Railway, not committed):
+  - **`APP_PASSWORD`** — must match the frontend **`NEXT_PUBLIC_APP_PASSWORD`** (`X-App-Password`).
+  - **`ENCRYPTION_SECRET`** — must match **`NEXT_PUBLIC_ENCRYPTION_SECRET`** so encrypted API keys decrypt.
+- **Note:** Conversation memory is **in-process** (`nutrition_graph`); use a **single replica** unless you swap storage later.
+
 ## Chat API (issue **#4**)
 
 `POST /api/chat` JSON body:
