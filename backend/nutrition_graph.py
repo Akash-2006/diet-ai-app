@@ -1,4 +1,4 @@
-"""LangGraph agent: Claude + nutrition system prompt."""
+"""LangGraph agent: Claude + nutrition system prompt + multi-turn memory per conversation_id."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import base64
 import uuid
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, MessagesState, StateGraph
 
@@ -17,6 +17,9 @@ When analyzing food images, provide detailed nutritional estimates."""
 MODEL_NAME = "claude-sonnet-4-20250514"
 
 _graph = None
+
+# In-memory transcripts (lost on restart; single-worker assumption for MVP).
+_conversation_histories: dict[str, list[BaseMessage]] = {}
 
 
 def _call_model(state: MessagesState, config: RunnableConfig) -> dict:
@@ -52,12 +55,25 @@ def _assistant_text_from_result(out: dict) -> str:
     return body if isinstance(body, str) else str(body)
 
 
-def run_nutrition_chat(decrypted_api_key: str, user_message: str) -> tuple[str, str]:
-    """Return (assistant_text, conversation_id). Memory per session lands in issue #6."""
+def _resolve_conversation_id(conversation_id: str | None) -> str:
+    cid = conversation_id.strip() if conversation_id else ""
+    return cid or str(uuid.uuid4())
+
+
+def run_nutrition_chat(
+    decrypted_api_key: str,
+    user_message: str,
+    conversation_id: str | None,
+) -> tuple[str, str]:
     graph = get_graph()
+    cid = _resolve_conversation_id(conversation_id)
+    hist = _conversation_histories.setdefault(cid, [])
+    hist.append(HumanMessage(content=user_message))
     cfg: RunnableConfig = {"configurable": {"anthropic_api_key": decrypted_api_key}}
-    out = graph.invoke({"messages": [HumanMessage(content=user_message)]}, cfg)
-    return _assistant_text_from_result(out), str(uuid.uuid4())
+    out = graph.invoke({"messages": hist}, cfg)
+    merged = list(out["messages"])
+    _conversation_histories[cid] = merged
+    return _assistant_text_from_result(out), cid
 
 
 def run_nutrition_image_chat(
@@ -65,18 +81,28 @@ def run_nutrition_image_chat(
     media_type: str,
     image_bytes: bytes,
     user_caption: str | None,
+    conversation_id: str | None,
 ) -> tuple[str, str]:
-    """Vision: food image + optional caption. Same graph; multimodal HumanMessage."""
     caption = (user_caption or "").strip()
     if not caption:
         caption = "Describe this food and estimate nutrition (calories and macros)."
     b64 = base64.b64encode(image_bytes).decode("ascii")
     media = media_type.strip() if media_type else "application/octet-stream"
-    content = [
+    content: list[str | dict] = [
         {"type": "text", "text": caption},
         {"type": "image_url", "image_url": {"url": f"data:{media};base64,{b64}"}},
     ]
     graph = get_graph()
+    cid = _resolve_conversation_id(conversation_id)
+    hist = _conversation_histories.setdefault(cid, [])
+    hist.append(HumanMessage(content=content))
     cfg: RunnableConfig = {"configurable": {"anthropic_api_key": decrypted_api_key}}
-    out = graph.invoke({"messages": [HumanMessage(content=content)]}, cfg)
-    return _assistant_text_from_result(out), str(uuid.uuid4())
+    out = graph.invoke({"messages": hist}, cfg)
+    merged = list(out["messages"])
+    _conversation_histories[cid] = merged
+    return _assistant_text_from_result(out), cid
+
+
+def reset_conversation(conversation_id: str) -> None:
+    if conversation_id:
+        _conversation_histories.pop(conversation_id.strip(), None)

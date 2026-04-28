@@ -32,7 +32,23 @@ Copy `.env.example` to `.env` and set `APP_PASSWORD` and `ENCRYPTION_SECRET`.
 ```
 
 Headers: `X-App-Password: <APP_PASSWORD>`  
-Response: `{ "reply": "...", "conversation_id": "<uuid>" }` (multi-turn memory in issue **#6**).
+Response: `{ "reply": "...", "conversation_id": "<uuid>" }`.
+
+Send the returned **`conversation_id`** on later turns so the assistant keeps thread context (stored **in-memory** on the server).
+
+## Reset conversation (issue **#6**)
+
+`POST /api/chat/reset`:
+
+```json
+{
+  "encrypted_api_key": "<CryptoJS ciphertext>",
+  "conversation_id": "<id to clear>"
+}
+```
+
+Headers: `X-App-Password`  
+Response: `{ "ok": true, "conversation_id": "..." }`
 
 ## Image upload (issue **#5**)
 
@@ -41,7 +57,7 @@ Response: `{ "reply": "...", "conversation_id": "<uuid>" }` (multi-turn memory i
 | Field | Type | Notes |
 |-------|------|--------|
 | `encrypted_api_key` | string | CryptoJS ciphertext (same as text chat) |
-| `conversation_id` | string | optional placeholder (issue **#6**) |
+| `conversation_id` | string | optional; omit or send server id to stay in-thread |
 | `message` | string | optional caption |
 | `image` | file | image/jpeg, png, … |
 
