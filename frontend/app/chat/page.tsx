@@ -5,14 +5,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { getApiBaseUrl, resetConversation as resetRemote, sendChatMessage } from "@/lib/chatApi";
+import {
+  getApiBaseUrl,
+  resetConversation as resetRemote,
+  sendChatImage,
+  sendChatMessage,
+} from "@/lib/chatApi";
 import { getStoredEncryptedApiKey } from "@/lib/encryptedApiKey";
 
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  imagePreviewUrl?: string;
 };
+
+function revokeMessageImages(messages: ChatMessage[]) {
+  for (const m of messages) {
+    if (m.imagePreviewUrl) URL.revokeObjectURL(m.imagePreviewUrl);
+  }
+}
 
 export default function ChatPage() {
   const [mounted, setMounted] = useState(false);
@@ -20,10 +32,18 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string } | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const endRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  const pendingRef = useRef(pendingImage);
+  messagesRef.current = messages;
+  pendingRef.current = pendingImage;
 
   useEffect(() => {
     setMounted(true);
@@ -34,11 +54,18 @@ export default function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  useEffect(() => {
+    return () => {
+      revokeMessageImages(messagesRef.current);
+      if (pendingRef.current?.previewUrl) URL.revokeObjectURL(pendingRef.current.previewUrl);
+    };
+  }, []);
+
   const appendMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
     setMessages((prev) => [...prev, { ...msg, id: crypto.randomUUID() }]);
   }, []);
 
-  async function submitMessage() {
+  async function submitTextMessage() {
     setError(null);
     const text = draft.trim();
     if (!text || loading) return;
@@ -65,9 +92,71 @@ export default function ChatPage() {
     }
   }
 
+  async function submitImageMessage() {
+    if (!pendingImage || loading) return;
+    setError(null);
+    const key = encryptedKey?.trim();
+    if (!key) {
+      setError("No API key configured. Visit setup first.");
+      return;
+    }
+    const caption = draft.trim();
+    const { file, previewUrl } = pendingImage;
+    appendMessage({
+      role: "user",
+      content: caption || "📷 Food photo",
+      imagePreviewUrl: previewUrl,
+    });
+    setDraft("");
+    setPendingImage(null);
+    setLoading(true);
+    try {
+      const data = await sendChatImage({
+        encryptedApiKey: key,
+        image: file,
+        message: caption || undefined,
+        conversationId: conversationId ?? undefined,
+        fileName: file.name,
+      });
+      appendMessage({ role: "assistant", content: data.reply });
+      setConversationId(data.conversation_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitOutgoing() {
+    if (pendingImage) {
+      await submitImageMessage();
+    } else {
+      await submitTextMessage();
+    }
+  }
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !f.type.startsWith("image/")) return;
+    setPendingImage((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return { file: f, previewUrl: URL.createObjectURL(f) };
+    });
+  }
+
+  function clearPendingImage() {
+    setPendingImage((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }
+
   async function handleReset() {
     setError(null);
     const key = encryptedKey?.trim();
+    revokeMessageImages(messages);
+    clearPendingImage();
     if (!conversationId?.trim()) {
       setMessages([]);
       setConversationId(null);
@@ -90,6 +179,8 @@ export default function ChatPage() {
   }
 
   const hasKey = Boolean(encryptedKey);
+  const canSend =
+    !loading && (Boolean(draft.trim()) || Boolean(pendingImage));
 
   return (
     <main className="flex min-h-dvh flex-col bg-background">
@@ -129,14 +220,10 @@ export default function ChatPage() {
           </div>
         ) : (
           <>
-            <section
-              className="flex-1 overflow-y-auto px-4 py-4"
-              aria-label="Conversation"
-            >
+            <section className="flex-1 overflow-y-auto px-4 py-4" aria-label="Conversation">
               {messages.length === 0 ? (
                 <p className="mx-auto max-w-xl text-center text-sm text-muted-foreground">
-                  Ask anything about nutrition, meals, macros, or diet goals — messages stay in memory until you
-                  reset or refresh the page.
+                  Ask about nutrition or attach a photo of food for analysis — thread stays until you reset or refresh.
                 </p>
               ) : (
                 <ul className="mx-auto flex max-w-xl flex-col gap-3">
@@ -149,6 +236,13 @@ export default function ChatPage() {
                             : "max-w-[85%] rounded-2xl rounded-bl-md bg-muted px-3 py-2 text-foreground whitespace-pre-wrap"
                         }
                       >
+                        {m.role === "user" && m.imagePreviewUrl ? (
+                          <div className="mb-2 overflow-hidden rounded-lg">
+                            {/* Blob URLs — next/image optimizer not applicable */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img alt="" src={m.imagePreviewUrl} className="max-h-56 w-full object-cover" />
+                          </div>
+                        ) : null}
                         {m.content}
                       </div>
                     </li>
@@ -173,28 +267,63 @@ export default function ChatPage() {
               className="border-t border-border bg-card p-4"
               onSubmit={(e) => {
                 e.preventDefault();
-                void submitMessage();
+                void submitOutgoing();
               }}
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="sr-only"
+                accept="image/*"
+                aria-label="Choose food photo"
+                onChange={onPickFile}
+              />
               <div className="mx-auto flex max-w-xl flex-col gap-2">
+                {pendingImage ? (
+                  <div className="relative flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      alt=""
+                      src={pendingImage.previewUrl}
+                      className="h-20 w-20 shrink-0 rounded-md border border-border object-cover"
+                    />
+                    <div className="min-w-0 flex-1 text-xs text-muted-foreground">
+                      <p className="truncate font-medium text-foreground">{pendingImage.file.name}</p>
+                      <p>Uses vision endpoint. Add an optional caption below, then send.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={clearPendingImage}>
+                      Remove
+                    </Button>
+                  </div>
+                ) : null}
                 <Textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Type a message…"
+                  placeholder={
+                    pendingImage ? "Optional caption (e.g. rough portion size)" : "Type a message…"
+                  }
                   rows={3}
                   disabled={loading}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      void submitMessage();
+                      if (canSend) void submitOutgoing();
                     }
                   }}
                   className="resize-none"
                   aria-label="Message"
                 />
-                <div className="flex justify-end gap-2">
-                  <Button type="submit" disabled={loading || !draft.trim()}>
-                    {loading ? "Sending…" : "Send"}
+                <div className="flex flex-wrap justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={loading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Photo
+                  </Button>
+                  <Button type="submit" disabled={!canSend}>
+                    {loading ? "Sending…" : pendingImage ? "Send photo" : "Send"}
                   </Button>
                 </div>
               </div>

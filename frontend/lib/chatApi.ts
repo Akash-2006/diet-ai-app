@@ -1,5 +1,5 @@
 /**
- * Backend text chat + reset (multipart image is issue #10).
+ * Backend text chat, image upload, and reset.
  */
 
 export function getApiBaseUrl(): string {
@@ -42,6 +42,28 @@ async function parseErrorResponse(res: Response): Promise<string> {
   }
 }
 
+async function postAppFormData<T>(path: string, formData: FormData): Promise<T> {
+  const pwd = getAppPassword();
+  if (!pwd) {
+    throw new Error(
+      "NEXT_PUBLIC_APP_PASSWORD is not set. It must match the backend APP_PASSWORD (see frontend/.env.example)."
+    );
+  }
+  const url = `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-App-Password": pwd,
+    },
+    body: formData,
+  });
+  if (!res.ok) {
+    const msg = await parseErrorResponse(res);
+    throw new Error(msg || `Request failed (${res.status})`);
+  }
+  return (await res.json()) as T;
+}
+
 async function postAppJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
   const pwd = getAppPassword();
   if (!pwd) {
@@ -79,6 +101,26 @@ export async function sendChatMessage(args: {
   const cid = args.conversationId?.trim();
   if (cid) body.conversation_id = cid;
   return postAppJson<ChatPostResponse>("/api/chat", body);
+}
+
+/** Multipart upload to `POST /api/chat/image` (vision). */
+export async function sendChatImage(args: {
+  encryptedApiKey: string;
+  image: File | Blob;
+  message?: string | null;
+  conversationId?: string | null;
+  fileName?: string;
+}): Promise<ChatPostResponse> {
+  const fd = new FormData();
+  fd.append("encrypted_api_key", args.encryptedApiKey.trim());
+  const cid = args.conversationId?.trim();
+  if (cid) fd.append("conversation_id", cid);
+  fd.append("message", (args.message ?? "").trim());
+  const name =
+    args.fileName ??
+    (args.image instanceof File ? args.image.name : "upload");
+  fd.append("image", args.image, name);
+  return postAppFormData<ChatPostResponse>("/api/chat/image", fd);
 }
 
 export async function resetConversation(
