@@ -8,13 +8,16 @@ export default function Home() {
       <div className="text-center space-y-2 max-w-md">
         <h1 className="text-2xl font-semibold tracking-tight">Diet &amp; Nutrition AI</h1>
         <p className="text-sm text-muted-foreground">
-          Configure your encrypted Anthropic API key (stored in the browser only), then continue to chat
-          when it ships.
+          Configure your encrypted Anthropic API key, then open chat — all on device; backend uses your key for
+          model calls.
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Button asChild>
           <Link href="/setup">API key setup</Link>
+        </Button>
+        <Button asChild variant="secondary">
+          <Link href="/chat">Open chat</Link>
         </Button>
       </div>
     </main>

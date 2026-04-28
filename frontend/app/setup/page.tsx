@@ -108,9 +108,16 @@ export default function SetupPage() {
           </div>
         </form>
 
-        <Button variant="ghost" className="w-full" asChild>
-          <Link href="/">&larr; Back to home</Link>
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="ghost" className="flex-1" asChild>
+            <Link href="/">&larr; Home</Link>
+          </Button>
+          {stored ? (
+            <Button className="flex-1" asChild>
+              <Link href="/chat">Open chat</Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
     </main>
   );
