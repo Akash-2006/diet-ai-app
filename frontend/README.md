@@ -36,3 +36,5 @@ Copy `.env.example` to `.env.local` at minimum:
 - **`__tests__/chat-page.smoke.test.tsx`** — chat shell when a key exists; **Photo** + hidden file input.
 
 Config: `vitest.config.mjs`, `vitest.setup.ts` (maps `next/link`, stubs `ResizeObserver` / `scrollIntoView`).
+
+CI on `frontend/**`: `.github/workflows/frontend-ci.yml` (`npm ci`, `npm run lint`, `npm run test`).
