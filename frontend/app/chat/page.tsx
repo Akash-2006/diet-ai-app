@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +27,17 @@ function revokeMessageImages(messages: ChatMessage[]) {
     if (m.imagePreviewUrl) URL.revokeObjectURL(m.imagePreviewUrl);
   }
 }
+
+const assistantMarkdownClass =
+  "prose prose-sm max-w-none break-words text-foreground " +
+  "prose-headings:mb-2 prose-headings:mt-3 prose-headings:font-semibold prose-headings:text-foreground prose-headings:first:mt-0 " +
+  "prose-p:my-2 prose-p:leading-relaxed prose-p:first:mt-0 prose-p:last:mb-0 " +
+  "prose-strong:text-foreground prose-strong:font-semibold " +
+  "prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 " +
+  "prose-a:text-primary prose-a:underline " +
+  "prose-code:rounded prose-code:bg-background/80 prose-code:px-1 prose-code:py-px prose-code:text-foreground " +
+  "prose-pre:my-2 prose-pre:border prose-pre:border-border prose-pre:bg-background prose-pre:text-foreground " +
+  "prose-hr:border-border";
 
 export default function ChatPage() {
   const [mounted, setMounted] = useState(false);
@@ -232,8 +245,8 @@ export default function ChatPage() {
                       <div
                         className={
                           m.role === "user"
-                            ? "max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-2 text-primary-foreground"
-                            : "max-w-[85%] rounded-2xl rounded-bl-md bg-muted px-3 py-2 text-foreground whitespace-pre-wrap"
+                            ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-3 py-2 text-primary-foreground"
+                            : "max-w-[85%] rounded-2xl rounded-bl-md bg-muted px-3 py-2 text-foreground"
                         }
                       >
                         {m.role === "user" && m.imagePreviewUrl ? (
@@ -243,7 +256,13 @@ export default function ChatPage() {
                             <img alt="" src={m.imagePreviewUrl} className="max-h-56 w-full object-cover" />
                           </div>
                         ) : null}
-                        {m.content}
+                        {m.role === "assistant" ? (
+                          <div className={assistantMarkdownClass}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          m.content
+                        )}
                       </div>
                     </li>
                   ))}
