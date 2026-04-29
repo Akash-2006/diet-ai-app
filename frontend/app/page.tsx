@@ -19,6 +19,15 @@ export default function Home() {
         <Button asChild variant="secondary">
           <Link href="/chat">Open chat</Link>
         </Button>
+        <Button asChild variant="outline">
+          <Link href="/register">Register</Link>
+        </Button>
+        <Button asChild variant="ghost">
+          <Link href="/login">Sign in</Link>
+        </Button>
+        <Button asChild variant="ghost">
+          <Link href="/dashboard">Dashboard</Link>
+        </Button>
       </div>
     </main>
   );

@@ -42,4 +42,7 @@ jobs:
         run: ruff check .
 
       - name: Pytest
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          JWT_SECRET: "ci-jwt-secret-must-be-at-least-32-characters"
         run: pytest -q
