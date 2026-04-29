@@ -55,6 +55,18 @@ def _assistant_text_from_result(out: dict) -> str:
     return body if isinstance(body, str) else str(body)
 
 
+def invoke_graph_with_messages(
+    decrypted_api_key: str,
+    messages: list[BaseMessage],
+) -> tuple[str, list[BaseMessage]]:
+    """Run the compiled graph on a full message list (must include the latest user turn)."""
+    graph = get_graph()
+    cfg: RunnableConfig = {"configurable": {"anthropic_api_key": decrypted_api_key}}
+    out = graph.invoke({"messages": messages}, cfg)
+    merged = list(out["messages"])
+    return _assistant_text_from_result(out), merged
+
+
 def _resolve_conversation_id(conversation_id: str | None) -> str:
     cid = conversation_id.strip() if conversation_id else ""
     return cid or str(uuid.uuid4())
@@ -65,15 +77,12 @@ def run_nutrition_chat(
     user_message: str,
     conversation_id: str | None,
 ) -> tuple[str, str]:
-    graph = get_graph()
     cid = _resolve_conversation_id(conversation_id)
     hist = _conversation_histories.setdefault(cid, [])
     hist.append(HumanMessage(content=user_message))
-    cfg: RunnableConfig = {"configurable": {"anthropic_api_key": decrypted_api_key}}
-    out = graph.invoke({"messages": hist}, cfg)
-    merged = list(out["messages"])
+    reply, merged = invoke_graph_with_messages(decrypted_api_key, hist)
     _conversation_histories[cid] = merged
-    return _assistant_text_from_result(out), cid
+    return reply, cid
 
 
 def run_nutrition_image_chat(
@@ -92,15 +101,12 @@ def run_nutrition_image_chat(
         {"type": "text", "text": caption},
         {"type": "image_url", "image_url": {"url": f"data:{media};base64,{b64}"}},
     ]
-    graph = get_graph()
     cid = _resolve_conversation_id(conversation_id)
     hist = _conversation_histories.setdefault(cid, [])
     hist.append(HumanMessage(content=content))
-    cfg: RunnableConfig = {"configurable": {"anthropic_api_key": decrypted_api_key}}
-    out = graph.invoke({"messages": hist}, cfg)
-    merged = list(out["messages"])
+    reply, merged = invoke_graph_with_messages(decrypted_api_key, hist)
     _conversation_histories[cid] = merged
-    return _assistant_text_from_result(out), cid
+    return reply, cid
 
 
 def reset_conversation(conversation_id: str) -> None:

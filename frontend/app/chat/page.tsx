@@ -8,12 +8,18 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  fetchConversationMessages,
+  listConversations,
+  type ConversationSummary,
+} from "@/lib/authApi";
+import {
   getApiBaseUrl,
   resetConversation as resetRemote,
   sendChatImage,
   sendChatMessage,
 } from "@/lib/chatApi";
 import { getStoredEncryptedApiKey } from "@/lib/encryptedApiKey";
+import { getStoredAccessToken, setStoredAccessToken } from "@/lib/authToken";
 
 type ChatMessage = {
   id: string;
@@ -42,6 +48,8 @@ const assistantMarkdownClass =
 export default function ChatPage() {
   const [mounted, setMounted] = useState(false);
   const [encryptedKey, setEncryptedKey] = useState<string | null>(null);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -49,6 +57,7 @@ export default function ChatPage() {
     null
   );
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -58,10 +67,26 @@ export default function ChatPage() {
   messagesRef.current = messages;
   pendingRef.current = pendingImage;
 
+  const refreshConversations = useCallback(async () => {
+    if (!getStoredAccessToken()) return;
+    try {
+      const list = await listConversations();
+      setConversations(list);
+    } catch {
+      /* ignore list errors in sidebar */
+    }
+  }, []);
+
   useEffect(() => {
     setMounted(true);
     setEncryptedKey(getStoredEncryptedApiKey()?.trim() ?? null);
+    setLoggedIn(Boolean(getStoredAccessToken()));
   }, []);
+
+  useEffect(() => {
+    if (!mounted || !encryptedKey?.trim() || !loggedIn) return;
+    void refreshConversations();
+  }, [mounted, encryptedKey, loggedIn, refreshConversations]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,6 +102,47 @@ export default function ChatPage() {
   const appendMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
     setMessages((prev) => [...prev, { ...msg, id: crypto.randomUUID() }]);
   }, []);
+
+  function startNewChat() {
+    revokeMessageImages(messages);
+    setMessages([]);
+    setConversationId(null);
+  }
+
+  function logout() {
+    revokeMessageImages(messages);
+    if (pendingImage?.previewUrl) URL.revokeObjectURL(pendingImage.previewUrl);
+    setPendingImage(null);
+    setStoredAccessToken(null);
+    setLoggedIn(false);
+    setConversations([]);
+    setMessages([]);
+    setConversationId(null);
+  }
+
+  async function openConversation(id: string) {
+    setListLoading(true);
+    setError(null);
+    try {
+      const rows = await fetchConversationMessages(id);
+      revokeMessageImages(messages);
+      setConversationId(id);
+      setMessages(
+        rows.map((r) => ({
+          id: crypto.randomUUID(),
+          role: (r.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+          content:
+            r.role === "user" && r.has_image && !r.content.includes("📷")
+              ? `${r.content}\n📷 (saved photo)`
+              : r.content,
+        }))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load conversation.");
+    } finally {
+      setListLoading(false);
+    }
+  }
 
   async function submitTextMessage() {
     setError(null);
@@ -98,6 +164,7 @@ export default function ChatPage() {
       });
       appendMessage({ role: "assistant", content: data.reply });
       setConversationId(data.conversation_id);
+      await refreshConversations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed.");
     } finally {
@@ -133,6 +200,7 @@ export default function ChatPage() {
       });
       appendMessage({ role: "assistant", content: data.reply });
       setConversationId(data.conversation_id);
+      await refreshConversations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed.");
     } finally {
@@ -184,6 +252,7 @@ export default function ChatPage() {
       await resetRemote(key, conversationId);
       setMessages([]);
       setConversationId(null);
+      await refreshConversations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reset failed.");
     } finally {
@@ -192,8 +261,7 @@ export default function ChatPage() {
   }
 
   const hasKey = Boolean(encryptedKey);
-  const canSend =
-    !loading && (Boolean(draft.trim()) || Boolean(pendingImage));
+  const canSend = !loading && (Boolean(draft.trim()) || Boolean(pendingImage));
 
   return (
     <main className="flex min-h-dvh flex-col bg-background">
@@ -208,9 +276,28 @@ export default function ChatPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {loggedIn ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/login">Sign in</Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/register">Register</Link>
+              </Button>
+            </>
+          )}
           <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => handleReset()}>
             Reset thread
           </Button>
+          {loggedIn ? (
+            <Button type="button" variant="ghost" size="sm" onClick={logout}>
+              Log out
+            </Button>
+          ) : null}
           <Button variant="ghost" size="sm" asChild>
             <Link href="/setup">API key</Link>
           </Button>
@@ -232,122 +319,161 @@ export default function ChatPage() {
             </Button>
           </div>
         ) : (
-          <>
-            <section className="flex-1 overflow-y-auto px-4 py-4" aria-label="Conversation">
-              {messages.length === 0 ? (
-                <p className="mx-auto max-w-xl text-center text-sm text-muted-foreground">
-                  Ask about nutrition or attach a photo of food for analysis — thread stays until you reset or refresh.
-                </p>
-              ) : (
-                <ul className="mx-auto flex max-w-xl flex-col gap-3">
-                  {messages.map((m) => (
-                    <li key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                      <div
-                        className={
-                          m.role === "user"
-                            ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-3 py-2 text-primary-foreground"
-                            : "max-w-[85%] rounded-2xl rounded-bl-md bg-muted px-3 py-2 text-foreground"
-                        }
-                      >
-                        {m.role === "user" && m.imagePreviewUrl ? (
-                          <div className="mb-2 overflow-hidden rounded-lg">
-                            {/* Blob URLs — next/image optimizer not applicable */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img alt="" src={m.imagePreviewUrl} className="max-h-56 w-full object-cover" />
-                          </div>
-                        ) : null}
-                        {m.role === "assistant" ? (
-                          <div className={assistantMarkdownClass}>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                          </div>
-                        ) : (
-                          m.content
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                  <div ref={endRef} />
-                </ul>
-              )}
-              {conversationId ? (
-                <p className="mt-6 text-center text-[11px] text-muted-foreground">
-                  Conversation <code className="rounded bg-muted px-1">{conversationId.slice(0, 8)}…</code>
-                </p>
-              ) : null}
-            </section>
-
-            {error ? (
-              <div className="border-t border-border bg-destructive/10 px-4 py-2 text-center text-sm text-destructive">
-                {error}
-              </div>
-            ) : null}
-
-            <form
-              className="border-t border-border bg-card p-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void submitOutgoing();
-              }}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="sr-only"
-                accept="image/*"
-                aria-label="Choose food photo"
-                onChange={onPickFile}
-              />
-              <div className="mx-auto flex max-w-xl flex-col gap-2">
-                {pendingImage ? (
-                  <div className="relative flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      alt=""
-                      src={pendingImage.previewUrl}
-                      className="h-20 w-20 shrink-0 rounded-md border border-border object-cover"
-                    />
-                    <div className="min-w-0 flex-1 text-xs text-muted-foreground">
-                      <p className="truncate font-medium text-foreground">{pendingImage.file.name}</p>
-                      <p>Uses vision endpoint. Add an optional caption below, then send.</p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={clearPendingImage}>
-                      Remove
-                    </Button>
-                  </div>
-                ) : null}
-                <Textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={
-                    pendingImage ? "Optional caption (e.g. rough portion size)" : "Type a message…"
-                  }
-                  rows={3}
-                  disabled={loading}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (canSend) void submitOutgoing();
-                    }
-                  }}
-                  className="resize-none"
-                  aria-label="Message"
-                />
-                <div className="flex flex-wrap justify-between gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={loading}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Photo
-                  </Button>
-                  <Button type="submit" disabled={!canSend}>
-                    {loading ? "Sending…" : pendingImage ? "Send photo" : "Send"}
+          <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+            {loggedIn ? (
+              <aside
+                className="flex max-h-48 shrink-0 flex-col border-b border-border md:max-h-none md:w-56 md:border-b-0 md:border-r"
+                aria-label="Saved conversations"
+              >
+                <div className="flex flex-wrap gap-2 border-b border-border p-2 md:border-b">
+                  <Button type="button" size="sm" variant="secondary" disabled={listLoading} onClick={startNewChat}>
+                    New chat
                   </Button>
                 </div>
-              </div>
-            </form>
-          </>
+                <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+                  {conversations.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        disabled={listLoading}
+                        className={
+                          "w-full truncate rounded-md px-2 py-1.5 text-left text-xs transition-colors " +
+                          (conversationId === c.id
+                            ? "bg-muted font-medium text-foreground"
+                            : "text-muted-foreground hover:bg-muted/60")
+                        }
+                        onClick={() => void openConversation(c.id)}
+                      >
+                        {c.title || c.id.slice(0, 8)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+            ) : null}
+
+            <div className="flex min-w-0 min-h-0 flex-1 flex-col">
+              <section className="flex-1 overflow-y-auto px-4 py-4" aria-label="Conversation">
+                {loggedIn ? (
+                  <p className="mx-auto mb-3 max-w-xl text-center text-[11px] text-muted-foreground">
+                    You are signed in — threads are saved and appear in the sidebar.
+                  </p>
+                ) : null}
+                {messages.length === 0 ? (
+                  <p className="mx-auto max-w-xl text-center text-sm text-muted-foreground">
+                    Ask about nutrition or attach a photo of food for analysis.
+                    {!loggedIn ? " Without an account, the thread only lives in the server process until reset or restart." : ""}
+                  </p>
+                ) : (
+                  <ul className="mx-auto flex max-w-xl flex-col gap-3">
+                    {messages.map((m) => (
+                      <li key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                        <div
+                          className={
+                            m.role === "user"
+                              ? "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-3 py-2 text-primary-foreground"
+                              : "max-w-[85%] rounded-2xl rounded-bl-md bg-muted px-3 py-2 text-foreground"
+                          }
+                        >
+                          {m.role === "user" && m.imagePreviewUrl ? (
+                            <div className="mb-2 overflow-hidden rounded-lg">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img alt="" src={m.imagePreviewUrl} className="max-h-56 w-full object-cover" />
+                            </div>
+                          ) : null}
+                          {m.role === "assistant" ? (
+                            <div className={assistantMarkdownClass}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                            </div>
+                          ) : (
+                            m.content
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                    <div ref={endRef} />
+                  </ul>
+                )}
+                {conversationId ? (
+                  <p className="mt-6 text-center text-[11px] text-muted-foreground">
+                    Conversation <code className="rounded bg-muted px-1">{conversationId.slice(0, 8)}…</code>
+                  </p>
+                ) : null}
+              </section>
+
+              {error ? (
+                <div className="border-t border-border bg-destructive/10 px-4 py-2 text-center text-sm text-destructive">
+                  {error}
+                </div>
+              ) : null}
+
+              <form
+                className="border-t border-border bg-card p-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void submitOutgoing();
+                }}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="sr-only"
+                  accept="image/*"
+                  aria-label="Choose food photo"
+                  onChange={onPickFile}
+                />
+                <div className="mx-auto flex max-w-xl flex-col gap-2">
+                  {pendingImage ? (
+                    <div className="relative flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        alt=""
+                        src={pendingImage.previewUrl}
+                        className="h-20 w-20 shrink-0 rounded-md border border-border object-cover"
+                      />
+                      <div className="min-w-0 flex-1 text-xs text-muted-foreground">
+                        <p className="truncate font-medium text-foreground">{pendingImage.file.name}</p>
+                        <p>Uses vision endpoint. Add an optional caption below, then send.</p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={clearPendingImage}>
+                        Remove
+                      </Button>
+                    </div>
+                  ) : null}
+                  <Textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder={
+                      pendingImage ? "Optional caption (e.g. rough portion size)" : "Type a message…"
+                    }
+                    rows={3}
+                    disabled={loading}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (canSend) void submitOutgoing();
+                      }
+                    }}
+                    className="resize-none"
+                    aria-label="Message"
+                  />
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={loading}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Photo
+                    </Button>
+                    <Button type="submit" disabled={!canSend}>
+                      {loading ? "Sending…" : pendingImage ? "Send photo" : "Send"}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </main>

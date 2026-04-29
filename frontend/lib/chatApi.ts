@@ -2,6 +2,8 @@
  * Backend text chat, image upload, and reset.
  */
 
+import { getStoredAccessToken } from "./authToken";
+
 export function getApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
   return raw.replace(/\/$/, "");
@@ -10,6 +12,19 @@ export function getApiBaseUrl(): string {
 export function getAppPassword(): string | undefined {
   const p = process.env.NEXT_PUBLIC_APP_PASSWORD?.trim();
   return p || undefined;
+}
+
+function appAuthHeaders(): Record<string, string> {
+  const pwd = getAppPassword();
+  if (!pwd) {
+    throw new Error(
+      "NEXT_PUBLIC_APP_PASSWORD is not set. It must match the backend APP_PASSWORD (see frontend/.env.example)."
+    );
+  }
+  const headers: Record<string, string> = { "X-App-Password": pwd };
+  const token = getStoredAccessToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 function stringifyDetail(data: unknown): string {
@@ -43,18 +58,10 @@ async function parseErrorResponse(res: Response): Promise<string> {
 }
 
 async function postAppFormData<T>(path: string, formData: FormData): Promise<T> {
-  const pwd = getAppPassword();
-  if (!pwd) {
-    throw new Error(
-      "NEXT_PUBLIC_APP_PASSWORD is not set. It must match the backend APP_PASSWORD (see frontend/.env.example)."
-    );
-  }
   const url = `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "X-App-Password": pwd,
-    },
+    headers: appAuthHeaders(),
     body: formData,
   });
   if (!res.ok) {
@@ -65,18 +72,12 @@ async function postAppFormData<T>(path: string, formData: FormData): Promise<T> 
 }
 
 async function postAppJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const pwd = getAppPassword();
-  if (!pwd) {
-    throw new Error(
-      "NEXT_PUBLIC_APP_PASSWORD is not set. It must match the backend APP_PASSWORD (see frontend/.env.example)."
-    );
-  }
   const url = `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-App-Password": pwd,
+      ...appAuthHeaders(),
     },
     body: JSON.stringify(body),
   });

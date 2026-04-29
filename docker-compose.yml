@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: diet
+      POSTGRES_PASSWORD: diet
+      POSTGRES_DB: diet_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - diet_ai_pg:/var/lib/postgresql/data
+
+volumes:
+  diet_ai_pg:
